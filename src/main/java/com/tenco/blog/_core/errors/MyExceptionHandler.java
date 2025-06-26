@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
 
+import java.math.BigInteger;
+
 // 모든 컨트롤러에서 발생하는 예외처리를 이 클래스에서 처리하겠다
 // RuntimeException 발생하면 해당 파일로 예외처리가 집중됨
 @ControllerAdvice // 에러 페이지로 연결처리
@@ -91,5 +93,4 @@ public class MyExceptionHandler {
         request.setAttribute("msg", "System error! Ask to admin");
         return "/err/err";
     }
-
 }
