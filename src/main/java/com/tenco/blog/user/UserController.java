@@ -25,7 +25,7 @@ public class UserController {
     @GetMapping("/user/update-form")
     public String updateForm(Model mod, HttpSession hs) {
         // 1 // 2 service
-        User sUser = (User) hs.getAttribute("sessionUser");
+        User sUser = (User) hs.getAttribute(Define.SESSION_USER);
         User user = us.findById(sUser.getId());
         mod.addAttribute("user", user);
         return "user/update-form";
@@ -41,10 +41,10 @@ public class UserController {
         // 2 유효성
         reqDTO.validate();
         // 3 service
-        User user = (User) hs.getAttribute("sessionUser");
+        User user = (User) hs.getAttribute(Define.SESSION_USER);
         User updatedUser = us.updateById(user.getId(), reqDTO);
         // 4 session sync
-        hs.setAttribute("sessionUser", updatedUser);
+        hs.setAttribute(Define.SESSION_USER, updatedUser);
         // 5 redirect
         return "redirect:/user/update-form";
     }

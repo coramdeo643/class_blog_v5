@@ -47,7 +47,7 @@ public class BoardController {
         // 3 수정 요청 > service
         // 4 redirect
         reqDTO.validate();
-        User sessionUser = (User) hs.getAttribute("sessionUser");
+        User sessionUser = (User) hs.getAttribute(Define.SESSION_USER);
         boardService.updateById(boardId, reqDTO, sessionUser);
         return "redirect:/board/" + boardId; // http://localhost:8080/board/1
     }
@@ -61,7 +61,7 @@ public class BoardController {
         // 2 세션 로그인 한 사용자 정보 추출
         // 3 service 위임
         // 4 redirect
-        User sessionUser = (User) hs.getAttribute("sessionUser"); // object 로 떨어짐 > user로 다운캐스팅
+        User sessionUser = (User) hs.getAttribute(Define.SESSION_USER); // object 로 떨어짐 > user로 다운캐스팅
         boardService.deleteById(id, sessionUser);
         return "redirect:/";
     }
@@ -80,7 +80,7 @@ public class BoardController {
         // 2
         reqDTO.validate();
         // 3 service
-        boardService.save(reqDTO, (User) session.getAttribute("sessionUser")); // method 화
+        boardService.save(reqDTO, (User) session.getAttribute(Define.SESSION_USER)); // method 화
         // 4
         return "redirect:/";
     }
