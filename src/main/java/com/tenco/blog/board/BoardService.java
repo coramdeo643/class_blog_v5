@@ -17,6 +17,9 @@ import java.util.List;
 // IoC
 @RequiredArgsConstructor
 @Service
+@Transactional(readOnly = true)
+// 모든 method를 읽기 전용 transaction 으로 실행(findAll, findById 성능 최적화 / 데이터 수정 방지)
+// DB lock 최소화 > 동시성 성능 개선
 public class BoardService {
     // No member variables, but final
     private static final Logger log = LoggerFactory.getLogger(BoardService.class);
@@ -25,7 +28,7 @@ public class BoardService {
     /*
       게시글 저장
      */
-    @Transactional // method level transesp
+    @Transactional // method level transaction / 데이터 수정이 필요하는 읽기 전용 설정을 해제하고 쓰기 전용으로 변환
     public Board save(BoardRequest.SaveDTO saveDTO, User sessionUser) {
         // 1. log - 게시글 저장 요청 정보
         // 2. DTO 를 entity 로 변환(작성자 정보 포함하기 위해서)
@@ -102,15 +105,26 @@ public class BoardService {
 
     }
 
-
-
-
-
-
-
-
-
-
-
+    /*
+     * 게시글 삭제(권한 체크)
+     */
+    @Transactional
+    public void deleteById(Long id, User sessionUser) {
+        // 1 log
+        // 2 삭제하려는 게시글 조회
+        // 3 권한 체크
+        // 4 권한이 없다면 403 forbidden 예외
+        // 5 DB 게시글 삭제
+        // 6 log - 삭제 완료
+        log.info("Start the service to delete the post - 게시글 ID {}", id);
+        Board board = br.findById(id).orElseThrow(() -> {
+            log.warn("Not found the post - ID {}", id);
+            return new Exception404("Not found the post");
+        });
+        if (!board.isOwner(sessionUser.getId())) {
+            throw new Exception403("Not eligible to delete the post");
+        }
+        br.deleteById(id);
+    }
 
 }
