@@ -2,12 +2,14 @@ package com.tenco.blog.user;
 
 import com.tenco.blog._core.errors.exception.Exception400;
 import com.tenco.blog._core.errors.exception.Exception401;
+import com.tenco.blog.utils.Define;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 
@@ -15,25 +17,35 @@ import org.springframework.web.bind.annotation.PostMapping;
 @Controller
 public class UserController {
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
-    private final UserRepository ur;
-    private final HttpSession hs;
+    private final UserService us;
 
+    /*
+    회원정보수정 화면요청
+     */
     @GetMapping("/user/update-form")
-    public String updateForm(HttpServletRequest request, HttpSession hs) {
-        log.info("Request to update the user info(FORM)");
+    public String updateForm(Model mod, HttpSession hs) {
+        // 1 // 2 service
         User sUser = (User) hs.getAttribute("sessionUser");
-        request.setAttribute("user", sUser);
+        User user = us.findById(sUser.getId());
+        mod.addAttribute("user", user);
         return "user/update-form";
     }
 
+    /*
+    회원정보수정 기능요청
+     */
     @PostMapping("/user/update")
     public String update(
-            UserRequest.UpdateDTO reqDTO, HttpSession hs, HttpServletRequest request) {
-        log.info("Request to update the user info");
-        User sUser = (User) hs.getAttribute("sessionUser");
+            UserRequest.UpdateDTO reqDTO, HttpSession hs) {
+        // 1 인증 intercept
+        // 2 유효성
         reqDTO.validate();
-        User updateUser = ur.updateById(sUser.getId(), reqDTO);
-        hs.setAttribute("sessionUser", updateUser);
+        // 3 service
+        User user = (User) hs.getAttribute("sessionUser");
+        User updatedUser = us.updateById(user.getId(), reqDTO);
+        // 4 session sync
+        hs.setAttribute("sessionUser", updatedUser);
+        // 5 redirect
         return "redirect:/user/update-form";
     }
 
@@ -43,44 +55,35 @@ public class UserController {
         return "user/join-form";
     }
 
+    /*
+    회원가입 기능 요청
+     */
     @PostMapping("/join")
-    public String join(UserRequest.JoinDTO joinDTO, HttpServletRequest request) {
-        log.info("Request to sign up the new user - username : {}, email : {}",
-                joinDTO.getUsername(), joinDTO.getEmail());
-        joinDTO.validate(); // defensive code
-        User existUser = ur.findByUsername(joinDTO.getUsername());
-        if (existUser != null) {
-            throw new Exception401("Username already exists;" + joinDTO.getUsername());
-        }
-        User user = joinDTO.toEntity();
-        ur.save(user);
+    public String join(UserRequest.JoinDTO joinDTO) {
+        joinDTO.validate();
+        us.join(joinDTO);
         return "redirect:/login-form";
     }
 
     @GetMapping("/login-form")
     public String loginForm() {
-        log.info("Request to log in(FORM)");
         return "user/login-form";
     }
 
+    /*
+    login 화면 요청
+     */
     @PostMapping("/login")
-    public String login(UserRequest.LoginDTO loginDTO, HttpServletRequest request) {
-        log.info("= = Log in = =");
-        log.info("USERNAME = {}", loginDTO.getUsername());
+    public String login(UserRequest.LoginDTO loginDTO, HttpSession s) {
         loginDTO.validate();
-        User user = ur.findByUsernameAndPassword(
-                loginDTO.getUsername(), loginDTO.getPassword());
-        if (user == null) {
-            throw new Exception400("Invalid username or password");
-        }
-        hs.setAttribute("sessionUser", user);
+        User user = us.login(loginDTO);
+        s.setAttribute(Define.SESSION_USER, user);
         return "redirect:/";
     }
 
     @GetMapping("/logout")
-    public String logout() {
-        log.info("= = Log out = =");
-        hs.invalidate();
+    public String logout(HttpSession s) {
+        s.invalidate();
         return "redirect:/";
     }
 }
