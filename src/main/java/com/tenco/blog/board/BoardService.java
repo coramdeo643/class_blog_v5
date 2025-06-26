@@ -3,6 +3,8 @@ package com.tenco.blog.board;
 import com.tenco.blog._core.errors.exception.Exception403;
 import com.tenco.blog._core.errors.exception.Exception404;
 import com.tenco.blog.user.User;
+import com.tenco.blog.utils.Define;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -125,6 +127,16 @@ public class BoardService {
             throw new Exception403("Not eligible to delete the post");
         }
         br.deleteById(id);
+    }
+
+    /*
+    게시글 소유자 확인 (수정 화면 요청 확인용)
+     */
+    public void checkBoardOwner(Long boardId, Long userId) {
+        Board board =  findById(boardId);
+        if(!board.isOwner(userId)) {
+            throw new Exception403("Not eligible to update the post");
+        }
     }
 
 }

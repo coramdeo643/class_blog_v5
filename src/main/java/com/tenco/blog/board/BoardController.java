@@ -1,6 +1,8 @@
 package com.tenco.blog.board;
 
+import com.tenco.blog._core.errors.exception.Exception403;
 import com.tenco.blog.user.User;
+import com.tenco.blog.utils.Define;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +32,8 @@ public class BoardController {
             HttpServletRequest req, HttpSession hs) {
         // 1 인증검사 > interceptor
         // 2 게시물 조회/예외/권한 > service
-        boardService.findById(boardId);
+        User sUser = (User) hs.getAttribute(Define.SESSION_USER);
+        boardService.checkBoardOwner(boardId, sUser.getId());
         req.setAttribute("board", boardService.findById(boardId));
         return "board/update-form";
     }
