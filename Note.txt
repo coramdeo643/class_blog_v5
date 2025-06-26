@@ -1,0 +1,464 @@
+Spring - Framework
+Spring Boot - Spring + Setting
+Template engine - mustache
+DB 접근 기술 - ORM Object... -> JPA; Java Persistence... > Hibernate
+ > Entity manager(JPA core interface)
+ > EM -- 1. Native query
+ > EM -- 2. JPQL(객체 지향 쿼리 개념)
+ > EM -- 3. Method(Persist Context)
+* 뷰 리졸버는 컨트롤러가 반환한 논리적 뷰 이름(예: "home")과 Model 데이터를 받아 실제 Mustache 템플릿(예: home.mustache)으로 매핑합니다.
+
+= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+연관관계 ->> JOIN 필요할때 연관관계 설정해야함
+관계차수(1:1 / 1:N / N:1 / M:N)
+데이터 가져오는 - Lazy 전략(요구한것만) / Eager 전략(전부다)
+ > we choose LAZY
+JPA - 전체 게시글 목록을 연관관계 데이터를 가져온다면 불필요한 select 많이 일어날수있다
+
+= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+회원가입 기능
+
+= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+인증검사 vs 권한체크
+아무나 게시글을 삭제할수있으면 안된다
+
+1. Repository - 삭제 기능
+2. Controller - 삭제 기능
+3. Request
+
+// 게시글 삭제 액션 처리
+// /board/{{board.id}}/delete method="post"
+// 1. 로그인 여부 확인(인증검사)
+//  > 로그인 안되어있으면, 로그인 페이지로 리다이렉트 처리
+//  > 로그인 되있으면, 게시글이 존재하는지 다시 확인 - 없으면, 이미 삭제된 게시물입니다
+// 2. 권한 체크(1번 유저 게시물인데 3번 유저가 삭제할수없음)
+// 3. 삭제 후, 인덱스(리스트) 화면으로 redirect
+
+// 게시글 수정하기 화면 요청
+// /board/{{board.id}}/update-form
+// 1. 인증검사(로그인)
+// 2. 수정할 게시글 존재여부확인
+// 3. 권한 체크
+// 4. 수정 폼에 기존 데이터 뷰 바인딩
+@GetMapping("/board/{id}/update-form")
+public String updateForm(
+        @PathVariable(name="id") Long boardId,
+        HttpServletRequest req, HttpSession hs) {
+    // 1.
+    User sessionUser = (User) hs.getAttribute("sessionUser");
+    if(sessionUser == null) {
+        return "redirect:/login-form";
+    }
+    // 2.
+    Board b = boardRepository.findById(boardId);
+    if (b == null) {
+        throw new RuntimeException("There is no post to update");
+    }
+    // 3.
+    if(!b.isOwner(sessionUser.getId())) {
+        throw new RuntimeException("Not eligible to update");
+    }
+    // 4.
+    req.setAttribute("board", b);
+    // 내부에서 스프링컨테이너 뷰 리졸브를 활용해서 머스태치 파일 찾기
+    return "board/update-form";
+}
+
+// 게시글 수정
+    public Board updateById(Long id, BoardRequest.UpdateDTO reqDTO) {
+        // dirty checking
+        Board board = findById(id);
+        board.setTitle(reqDTO.getTitle());
+        board.setContent(reqDTO.getContent());
+        // dirty checking process
+        // 1) 영속성 컨텍스트가 엔티티 최초 조회 상태를 스냅샷으로 보관
+        // 2) 필드 값 변경시 현재 상태와 스냅샷 비교
+        // 3) 트랜잭션 커밋시점에 변경된 필드만 update 쿼리 자동생성
+        return board;
+    }
+
+// 게시글 수정 액션 : Dirty checking
+// /board/{{board.id}}/update-form
+// 1. 인증검사 - 로그인체크
+// 2. 유효성검사 - 데이터 검증
+// 3. 권한체크를 위해 게시글 다시 조회
+// 4. 더티체킹을 통한 수정 설정
+// 5. 수정 완료 후 게시글 상세보기로 redirect.
+@PostMapping("/board/{id}/update-form")
+public String update(@PathVariable(name = "id") Long boardId,
+                     BoardRequest.UpdateDTO reqDTO,
+                     HttpSession hs) {
+    // 1.
+    User sessionUser = (User) hs.getAttribute("sessionUser");
+    if (sessionUser == null) {
+        return "redirect:/login-form";
+    }
+    // 2.
+    reqDTO.validate();
+    // 3.
+    Board board = boardRepository.findById(boardId);
+    if(!board.isOwner(sessionUser.getId())) {
+        throw new RuntimeException("Not eligible to update");
+    }
+    //4.
+    boardRepository.updateById(boardId,reqDTO);
+    return "redirect:/board/" + boardId; // http://localhost:8080/board/1
+}
+
+package com.tenco.blog.board;
+
+import com.tenco.blog._core.errors.exception.Exception403;
+import com.tenco.blog.user.User;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+
+import java.util.List;
+import java.util.SimpleTimeZone;
+
+@RequiredArgsConstructor
+@Controller // IoC 대상 - 싱글톤 패턴으로 관리된다
+public class BoardController {
+    // Dependencies Injection
+    private final BoardRepository boardRepository;
+
+    // 게시글 수정하기 화면 요청
+    // /board/{{board.id}}/update-form
+    // 1. 인증검사(로그인)
+    // 2. 수정할 게시글 존재여부확인
+    // 3. 권한 체크
+    // 4. 수정 폼에 기존 데이터 뷰 바인딩
+    @GetMapping("/board/{id}/update-form")
+    public String updateForm(
+            @PathVariable(name = "id") Long boardId,
+            HttpServletRequest req, HttpSession hs) {
+        // 1.
+        User sessionUser = (User) hs.getAttribute("sessionUser");
+        if (sessionUser == null) {
+            return "redirect:/login-form";
+        }
+        // 2.
+        Board b = boardRepository.findById(boardId);
+        if (b == null) {
+            throw new RuntimeException("There is no post to update");
+        }
+        // 3.
+        if (!b.isOwner(sessionUser.getId())) {
+            throw new RuntimeException("Not eligible to update");
+        }
+        // 4.
+        req.setAttribute("board", b);
+        // 내부에서 스프링컨테이너 뷰 리졸브를 활용해서 머스태치 파일 찾기
+        return "board/update-form";
+    }
+
+    // 게시글 수정 액션 : Dirty checking
+    // /board/{{board.id}}/update-form
+    // 1. 인증검사 - 로그인체크
+    // 2. 유효성검사 - 데이터 검증
+    // 3. 권한체크를 위해 게시글 다시 조회
+    // 4. 더티체킹을 통한 수정 설정
+    // 5. 수정 완료 후 게시글 상세보기로 redirect.
+    @PostMapping("/board/{id}/update-form")
+    public String update(@PathVariable(name = "id") Long boardId,
+                         BoardRequest.UpdateDTO reqDTO,
+                         HttpSession hs) {
+        // 1.
+        User sessionUser = (User) hs.getAttribute("sessionUser");
+        if (sessionUser == null) {
+            return "redirect:/login-form";
+        }
+        // 2.
+        reqDTO.validate();
+        // 3.
+        Board board = boardRepository.findById(boardId);
+        if(!board.isOwner(sessionUser.getId())) {
+            throw new RuntimeException("Not eligible to update");
+        }
+        //4.
+        boardRepository.updateById(boardId,reqDTO);
+        return "redirect:/board/" + boardId; // http://localhost:8080/board/1
+    }
+
+    // 게시글 삭제 액션 처리
+    // /board/{{board.id}}/delete method="post"
+    // 1. 로그인 여부 확인(인증검사)
+    //  > 로그인 안되어있으면, 로그인 페이지로 리다이렉트 처리
+    //  > 로그인 되있으면, 게시글이 존재하는지 다시 확인 - 없으면, 이미 삭제된 게시물입니다
+    // 2. 권한 체크(1번 유저 게시물인데 3번 유저가 삭제할수없음)
+    // 3. 삭제 후, 인덱스(리스트) 화면으로 redirect
+    @PostMapping("/board/{id}/delete")
+    public String delete(@PathVariable(name = "id") Long id, HttpSession hs) {
+        // 1. 로그인 체크 Define.SESSION_USER
+        User sessionUser = (User) hs.getAttribute("sessionUser"); // object 로 떨어짐 > user로 다운캐스팅
+        if (sessionUser == null) {
+            // 로그인 하라고 redirect
+            // redirect:/ >> 내부에서 페이지 찾는것 아님,
+            // 다시 클라이언트에 와서 > GET 요청이 온 것 > HTTP 메세지 생성됨
+            return "redirect:/login-form";
+        }
+        // 게시물 존재여부확인(내가 삭제하기전에 삭제되어있을수도있음)
+        Board board = boardRepository.findById(id);
+        if (board == null) {
+            throw new IllegalArgumentException("It is deleted already");
+        }
+        // 2. 권한체크
+        if (!board.isOwner(sessionUser.getId())) {
+            throw new RuntimeException("Not eligible to delete");
+        }
+//        if (!(sessionUser.getId() == board.getUser().getId())) {
+//            throw new RuntimeException("Not eligible to delete");
+//        }
+        // 3. 권한확인이후 삭제처리
+        boardRepository.deleteById(id);
+        // redirect
+        return "redirect:/";
+    }
+
+    /**
+     * Addess : http:// 8080/
+     *
+     * @param session
+     * @return
+     */
+    @GetMapping("/board/save-form")
+    public String saveForm(HttpSession session) {
+        // 권한 체크 > 로그인 된 사용자만 이동
+        User sessionUser = (User) session.getAttribute("sessionUser");
+        if (sessionUser == null) {
+            // 로그인 안한 경우 다시 로그인 페이지로 리다이렉트 처리
+            return "redirect:/login-form";
+        }
+        return "board/save-form";
+    }
+
+    // http://localhost:8080/board/save
+    // Post save action
+    @PostMapping("/board/save")
+    public String save(BoardRequest.SaveDTO reqDTO, HttpSession session) {
+
+        // 권한 체크(무조건)
+        try {
+            User sessionUser = (User) session.getAttribute("sessionUser");
+            if (sessionUser == null) {
+                // 로그인 안한 경우 다시 로그인 페이지로 리다이렉트 처리
+                return "redirect:/login-form";
+            }
+            //2. 유효성
+            reqDTO.validate();
+            //3. 저장
+//        Board board = reqDTO.toEntity(sessionUser);
+            boardRepository.save(reqDTO.toEntity(sessionUser));
+            return "redirect:/";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "board/save-form";
+        }
+    }
+
+    @GetMapping("/")
+    public String index(HttpServletRequest request) {
+
+        // 1. Post List find
+        List<Board> boardList = boardRepository.findByAll();
+        // 2. Board entity 에는 User entity와 연관관계 중 연관관계 호출 확인
+//        boardList.get(0).getUser().getUsername();
+        // 3. 뷰에 데이터 전달
+        request.setAttribute("boardList", boardList);
+        return "index";
+    }
+
+    // Address :
+    @GetMapping("/board/{id}")
+    public String detail(@PathVariable(name = "id") Long id,
+                         HttpServletRequest request) {
+        Board board = boardRepository.findById(id);
+        request.setAttribute("board", board);
+        return "board/detail";
+    }
+}
+
+package com.tenco.blog.board;
+
+import com.tenco.blog.user.User;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
+import jakarta.persistence.TypedQuery;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@RequiredArgsConstructor
+@Repository
+public class BoardRepository {
+    private final EntityManager em;
+    private static final Logger log = LoggerFactory.getLogger(BoardRepository.class);
+
+    @Transactional
+    public Board updateById(Long id, BoardRequest.UpdateDTO reqDTO) {
+        Board board = findById(id);
+        board.setTitle(reqDTO.getTitle());
+        board.setContent(reqDTO.getContent());
+        return board;
+    }
+
+    // 게시글 삭제
+    @Transactional
+    public void deleteById(Long id) {
+        // 1. NativeQuery - 테이블 대상
+        // 2. JPQL(Java Persistence Query Language) - Entity obj 대상
+        // 3. 영속성 처리(em) - CRUD(.createQuery/.find/.merge/.remove)
+        // JPQL
+        String jpql = "delete from Board b where b.id = :id ";
+        Query q = em.createQuery(jpql);
+        q.setParameter("id", id);
+        int deletedCount = q.executeUpdate(); // Insert, Update, Delete
+        if(deletedCount == 0) {
+            throw new IllegalArgumentException("There is no post to delete");
+        }
+    }
+    @Transactional
+    public void deleteByIdSafely(Long id) {
+        // 영속성 context 활용한 delete
+        // 1. 먼저 삭제할 entity를 영속 상태로 조회
+        Board board = em.find(Board.class, id);
+        // board = 영속화됨
+        // 2. entity 존재여부 확인
+        if(board == null) {
+            throw new IllegalArgumentException("There is no post to delete");
+        }
+        // 3. 영속화 상태의 엔티티를 삭제상태로 변경
+        em.remove(board);
+        // 장점 : 1차 캐시에서 자동제거 / 연관관계처리도 자동 수행(Cascade)
+    }
+//    @Transactional
+//    public void deleteById(Long id) {
+//        Board b = findById(id);
+//        em.remove(b);
+//    }
+
+    /**
+     * Save the post : User 와 연관관계를 가진 Board entity 영속화
+     *
+     * @param board
+     * @return board
+     */
+    @Transactional
+    public Board save(Board board) {
+        // 비영속 상태의 Board obj 를 영속성 context에 저장하면,
+        em.persist(board);
+        // 이후 시점 에는 사실 같은 메모리 주소를 가리킨다
+        return board;
+    }
+
+    public List<Board> findByAll() {
+        // find - JPQL query
+        String jpql = "select b from Board b order by b.id desc ";
+//        TypedQuery query = em.createQuery(jpql, Board.class);
+//        List<Board> boardList = query.getResultList();
+//        return boardList;
+        return em.createQuery(jpql, Board.class).getResultList();
+    }
+
+    /**
+     * Post find once(PK; Primitive key)
+     *
+     * @param id : Boarder entity id value
+     * @return : Board entity
+     */
+    public Board findById(Long id) {
+        // find - pk find, 무조건 EM method 활용이 이득
+        return em.find(Board.class, id);
+    }
+}
+
+package com.tenco.blog.user;
+
+import jakarta.persistence.EntityManager;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+
+@RequiredArgsConstructor // = DI
+@Repository // IoC + Singleton pattern
+public class UserRepository {
+    private final EntityManager em;
+
+    /**
+     * 로그인 요청 기능(사용자정보조회)
+     *
+     * @param username
+     * @param password
+     * @return 성공시 user entity / 실패시 null return
+     */
+    public User findByUsernameAndPassword(String username, String password) {
+        // JPQL
+        String jpql = "select u from User u " +
+                "where u.username = :username and u.password = :password ";
+        try {
+            return em.createQuery(jpql, User.class)
+                    .setParameter("username", username)
+                    .setParameter("password", password)
+                    .getSingleResult();
+        } catch (Exception e) {
+            // 일치하는 사용자가 없거나 에러 발생시 null 반환
+            // 즉, 로그인 실패를 의미한다
+            return null;
+        }
+    }
+
+    /**
+     * Sign-in (User insert / save user info.)
+     *
+     * @param user
+     * @return User entity
+     */
+    @Transactional
+    public User save(User user) { // 매개변수에 들어오는 user object 는 비영속화된 상태
+        em.persist(user); // 여기서부터 persist context 에 user 객체 관리하기 시작한다
+        // 트랜잭션 커밋 시점에 실제 INSERT 쿼리를 실행한다
+        return user;
+    }
+
+    // 사용자명 중복 체크용 조회 기능 (user unique)
+    public User findByUsername(String username) {
+//        String jpql = "select u from User u where u.username = :username; ";
+//        TypedQuery<User> typedQuery = em.createQuery(jpql, User.class);
+//        typedQuery.setParameter("username", username);
+//        return typedQuery.getSingleResult();
+        try {
+            String jpql = "select u from User u where u.username = :username ";
+            return em.createQuery(jpql, User.class)
+                    .setParameter("username", username)
+                    .getSingleResult();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public User findById(Long id) {
+        User user = em.find(User.class, id);
+        if (user == null) {
+            throw new RuntimeException("User not found with id : " + id);
+        }
+        return user;
+    }
+
+    @Transactional
+    public User updateById(Long id, UserRequest.UpdateDTO reqDTO) {
+        // 조회, 객체의 상태값 변경, 트랜잭션 처리 >> update
+        User user = findById(id);
+        // password update 객체의 상태값을 행위를 통해서 변경
+        user.setPassword(reqDTO.getPassword());
+        // updated 영속 entity 반환(session 동기화)
+        return user;
+    }
+}
